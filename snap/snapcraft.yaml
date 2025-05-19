@@ -1,0 +1,76 @@
+name: clickhouse-db
+base: core24 
+version: '25.4'
+summary: ClickHouse
+description: |
+   ClickHouse® is a real-time analytics database management system 
+
+grade: devel # must be 'stable' to release into candidate/stable channels
+confinement: strict
+
+hooks:
+  install:
+    plugs:
+      - network
+      - network-bind
+      - mount-observe
+
+parts:
+  clickhouse:
+    plugin: nil
+    source: https://github.com/ClickHouse/ClickHouse.git
+    source-tag: v25.4.2.31-stable
+    build-snaps:
+    - rustup/latest/stable
+    build-environment:
+    - CC: clang-19
+    - CXX: clang++-19
+    build-packages:
+    - git
+    - cmake
+    - ccache
+    - ninja-build
+    - nasm
+    - yasm
+    - gawk
+    - lsb-release
+    - software-properties-common
+    - gnupg
+    - wget
+    override-build: |
+      craftctl default
+      # rust
+      rustup toolchain install nightly-2024-12-01
+      rustup default nightly-2024-12-01
+      rustup component add rust-src
+      # llvm
+      bash -c "$(wget -O - https://apt.llvm.org/llvm.sh)"
+      # build
+      mkdir $CRAFT_PART_INSTALL/clickhouse
+      cd $CRAFT_PART_INSTALL/clickhouse
+      cmake -D CMAKE_BUILD_TYPE=release $CRAFT_PART_SRC
+      ninja -j 4
+    stage:
+      - clickhouse
+    override-prime: |
+      mkdir -p $CRAFT_PRIME/opt/
+      rm -rf $CRAFT_PRIME/opt/*
+      cp -R $CRAFT_STAGE/clickhouse/programs/* $CRAFT_PRIME/opt/
+
+
+apps:
+  server:
+    command: opt/clickhouse-server
+    daemon: simple
+    install-mode: disable
+    plugs:
+      - network
+      - network-bind
+      - removable-media
+      - mount-observe
+  client:
+    command: opt/clickhouse-client
+    plugs:
+      - network
+      - network-bind
+      - mount-observe
